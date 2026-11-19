@@ -41,7 +41,7 @@ function ticketScale() {
 }
 let ticketModules;
 function loadTicketModules() {
-  return ticketModules ??= Promise.all([import('./ticket.js'), import('./ticket-preview.js')]);
+  return ticketModules ??= Promise.all([import('./ticket.js?v=2'), import('./ticket-preview.js')]);
 }
 function prepareTicket(result) {
   async function render() {
