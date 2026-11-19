@@ -50,7 +50,7 @@ function warmCards(image) {
   return boxes.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,12);
 }
 
-export async function scanScreenshot(image,worker,stillCurrent,progress) {
+export async function scanScreenshot(image,worker,stillCurrent,progress,targetPool) {
   const w=image.naturalWidth,h=image.naturalHeight;
   const whole={x:0,y:0,w,h};
   const collected={agent:{},engine:{},unknown:{}};
@@ -78,41 +78,72 @@ export async function scanScreenshot(image,worker,stillCurrent,progress) {
     if(detected.size)return [...detected].every(p=>complete(collected[p]));
     return complete(collected.unknown);
   }
-  // First pass retains the full page's headings and their relative positions.
-  progress('正在整图识别频段和统计字段…');
-  absorb(readLayout(await read(whole,Math.min(1.6,1550/w,2800/h))),true);
-  if(!enough() || h>w*3.5){
-    progress('正在自动定位统计卡片…');
-    for(const box of warmCards(image)){
-      const scale=Math.min(4,800/box.w,750/box.h);
-      const layout=readLayout(await read(box,scale,true,'6'),true);
-      // An isolated card without a legible channel must not contaminate another pool.
-      absorb(layout,false);
+  function snapshot(){
+    const records={};
+    for(const [pool,fields] of Object.entries(collected)){
+      records[pool]={};
+      for(const [key,values] of Object.entries(fields))if(values.size===1)records[pool][key]=[...values][0];
     }
+    return {records,channels:[...detected]};
   }
-  if(!enough() || (h>w*3.5 && detected.size<2)){
+  function hasPool(layout,pool){
+    const record=layout.records[pool];
+    return layout.channels.includes(pool)&&record?.count!=null&&record.avg!=null;
+  }
+  async function* segments(){
     const scale=Math.min(2.5,1650/w);
-    const span=Math.min(h,Math.floor(1600/scale));
+    const span=Math.min(h,Math.max(1,Math.floor(1600/scale)));
     const stride=Math.max(1,Math.floor(span*.82));
     const positioned=[];
-    for(let y=0;;y+=stride){
-      const top=Math.min(y,h-span);
-      progress('正在精读统计区域 '+Math.round(100*(top+span)/h)+'%…');
-      const words=await read({x:0,y:top,w,h:span},scale,false,'11');
+    let top=0, lowerBound=0;
+    while(true){
+      const bottom=top+span;
+      const last=bottom>=h;
+      const nextTop=Math.min(top+stride,h-span);
+      const upperBound=last?h:(bottom+nextTop)/2;
+      progress('正在精读统计区域 '+Math.round(100*bottom/h)+'%…');
+      const words=await read({x:0,y:top,w,h:span},scale);
       for(const word of words){
         const b=word.bbox;
         const centerY=top+(b.y0+b.y1)/(2*scale);
-        if((y && centerY<top+(span-stride)/2) || (top+span<h && centerY>=top+span-(span-stride)/2))continue;
+        if(centerY<lowerBound || centerY>=upperBound)continue;
         positioned.push({text:word.text,bbox:{x0:b.x0/scale,x1:b.x1/scale,y0:top+b.y0/scale,y1:top+b.y1/scale}});
       }
-      if(top+span>=h)break;
+      if(last)return readLayout(positioned);
+      // Keep page coordinates so a heading can own fields in the next strip.
+      if(longImage && words.length)yield readLayout(positioned);
+      top=nextTop;
+      lowerBound=upperBound;
     }
-    absorb(readLayout(positioned),true);
   }
-  const records={};
-  for(const [pool,fields] of Object.entries(collected)){
-    records[pool]={};
-    for(const [key,values] of Object.entries(fields))if(values.size===1)records[pool][key]=[...values][0];
+  const longImage=h>w*3.5;
+  async function* scanStages(){
+    if(longImage){
+      const layout=yield* segments();
+      absorb(layout,true);
+      yield layout;
+    }
+    progress('正在整图识别频段和统计字段…');
+    absorb(readLayout(await read(whole,Math.min(1.6,1550/w,2800/h))),true);
+    if(longImage)yield snapshot();
+    if(!enough() || longImage){
+      progress('正在自动定位统计卡片…');
+      for(const box of warmCards(image)){
+        const scale=Math.min(4,800/box.w,750/box.h);
+        absorb(readLayout(await read(box,scale,true,'6'),true),false);
+        if(longImage)yield snapshot();
+      }
+    }
+    if(!longImage && !enough())absorb(yield* segments(),true);
+    return snapshot();
   }
-  return {records,channels:[...detected]};
+  const stages=scanStages();
+  async function readUntil(pool){
+    while(true){
+      const {value,done}=await stages.next();
+      if(done || (hasPool(value,'agent') && hasPool(value,'engine')))return value;
+      if(hasPool(value,pool))return {...value,resume:readUntil};
+    }
+  }
+  return readUntil(targetPool);
 }

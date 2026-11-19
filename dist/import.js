@@ -4,10 +4,10 @@ let activeDialog;
 
 async function startOcr() {
   const [{ default: T }, { scanScreenshot }] = await Promise.all([
-    import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js')
+    import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js?v=2')
   ]);
   const worker = await T.createWorker('chi_sim', 1, {
-    workerPath: asset('./ocr/worker.min.js'),
+    workerPath: asset('./ocr/mirror-worker.js'),
     workerBlobURL: false,
     langPath: asset('./ocr/'),
     corePath: asset('./ocr/tesseract-core-lstm.wasm.js'),
@@ -90,8 +90,23 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     updateSampleConsent();
     updateConfirm();
   }
-  pool.onchange=()=>{
+  pool.onchange=async ()=>{
     submitSample.checked=false;
+    const selected=pool.value, version=job;
+    const record=result.records[selected];
+    if(result.resume && !(record.count && record.avg)){
+      fields.disabled=confirm.disabled=true;
+      try{
+        const next=await result.resume(selected);
+        if(version!==job || !dialog.open)return;
+        result=next;
+      }catch{
+        if(version!==job || !dialog.open)return;
+        delete result.resume;
+      }
+      if(!result.resume)stopWorker();
+      fields.disabled=false;
+    }
     showPool();
   };
   for(const field of [count,avg])field.oninput=()=>{
@@ -138,13 +153,13 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
       if(!ocr&&current())ocr=await startOcr();
       if(!current()){await ocr?.worker.terminate();return;}
       worker=ocr.worker;
-      const found=await ocr.scanScreenshot(img,worker,current,progress);
+      const found=await ocr.scanScreenshot(img,worker,current,progress,preferred);
       if(!current())return;
       result=found;
     }catch{
       if(!current())return;
       failed=true;result={channels:[],records:{agent:{},engine:{},unknown:{}}};
-    }finally{if(current())stopWorker();}
+    }finally{if(current() && !result?.resume)stopWorker();}
     if(!current())return;
     pool.value=result.channels.includes(preferred)?preferred:result.channels[0]??preferred;
     fields.hidden=fields.disabled=false;showPool();
