@@ -8,6 +8,7 @@ const muted = '#54564a';
 const sans = '"Inter","Arial","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif';
 const mono = '"IBM Plex Mono","Menlo","Consolas","DejaVu Sans Mono",monospace';
 const heavy = '"Arial Black","Arial","Noto Sans CJK SC",sans-serif';
+const scoreFace = '"Barlow Condensed",' + heavy;
 const width = 1160, height = 512, seam = 859;
 
 function loadImage(path) {
@@ -18,7 +19,11 @@ function loadImage(path) {
     image.src = new URL(path, import.meta.url).href;
   });
 }
-const stockImages = Promise.all([loadImage('./hero.webp'), loadImage('./ticket-grain.png')]);
+const ticketAssets = Promise.all([
+  loadImage(matchMedia('(max-width:680px)').matches ? './hero-mobile.webp' : './hero.webp'),
+  loadImage('./ticket-grain.png'),
+  document.fonts.load('italic 900 128px "Barlow Condensed"', '0123456789.%<>').catch(() => {})
+]);
 
 function polygon(ctx, points, fill) {
   ctx.beginPath();
@@ -28,8 +33,8 @@ function polygon(ctx, points, fill) {
 }
 
 function label(ctx, value, x, y, size, options = {}) {
-  const {weight = 700, color = ink, face = sans, max, align = 'left'} = options;
-  ctx.font = weight + ' ' + size + 'px ' + face;
+  const {weight = 700, color = ink, face = sans, max, align = 'left', style = 'normal'} = options;
+  ctx.font = style + ' ' + weight + ' ' + size + 'px ' + face;
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = color;
@@ -149,7 +154,7 @@ function punch(ctx) {
 }
 
 async function drawTicket(result, tier, demo, scale, modules) {
-  const [image, grain] = await stockImages;
+  const [image, grain] = await ticketAssets;
   const canvas = document.createElement('canvas');
   canvas.width = width * scale; canvas.height = height * scale;
   const ctx = canvas.getContext('2d');
@@ -164,12 +169,12 @@ async function drawTicket(result, tier, demo, scale, modules) {
   stroke(ctx,27,104,54,104,orange,5);
   label(ctx,'理论欧气百分位',66,110,26,{weight:900});
   const score = percentileLabel(result.percentile);
-  const largeSize = score.length > 5 ? 88 : 106;
-  const scoreFont = '900 '+largeSize+'px '+heavy;
-  ctx.font = scoreFont;
+  const largeSize = score.length > 5 ? 108 : 128;
+  const scoreStyle = {weight:900, face:scoreFace, style:'italic'};
+  ctx.font = 'italic 900 '+largeSize+'px '+scoreFace;
   const scoreWidth = Math.min(ctx.measureText(score).width,340);
-  label(ctx,score,24,219,largeSize,{weight:900,face:heavy,max:340});
-  label(ctx,'%',32+scoreWidth,218,43,{weight:900,face:heavy});
+  label(ctx,score,28,219,largeSize,{...scoreStyle,max:340});
+  label(ctx,'%',39+scoreWidth,218,48,scoreStyle);
   const verdict = typeof tier === 'function' ? tier(result.percentile) : tier;
   if (verdict) {
     ctx.save();

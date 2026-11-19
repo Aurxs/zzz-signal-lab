@@ -24,7 +24,7 @@ let pool='agent', active=null, mode='demo', requestId=0;
 const dialog=$('#dialog'), contents=$('#dialog-content');
 function readStored(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}}
 function writeStored(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
-function showDialog(title,html){dialog.classList.remove('ticket-dialog');$('#dialog-title').textContent=title;contents.innerHTML=html;if(!dialog.open)dialog.showModal()}
+function showDialog(title,html,isTicket=false){dialog.classList.toggle('ticket-dialog',isTicket);$('#dialog-title').textContent=title;contents.innerHTML=html;if(!dialog.open)dialog.showModal()}
 $('#close').onclick=()=>dialog.close();
 dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
 function choosePool(p){if(!(p in pools))return;pool=p;$('#avg').max=p==='agent'?180:160;document.querySelectorAll('[data-pool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pool===p)))}
@@ -39,6 +39,23 @@ function ticketScale() {
     - 2 * Math.max(8, Math.min(28, window.innerWidth * .025));
   return cssWidth * window.devicePixelRatio > 1160 ? 2 : 1;
 }
+let ticketModules;
+function loadTicketModules() {
+  return ticketModules ??= Promise.all([import('./ticket.js'), import('./ticket-preview.js')]);
+}
+function prepareTicket(result) {
+  async function render() {
+    if (active !== result || document.hidden) return;
+    try {
+      const [{ getTicket }] = await loadTicketModules();
+      if (active !== result || document.hidden) return;
+      await getTicket(result, tier(result.percentile), false, ticketScale(), sharedUrl(result)).preview;
+    } catch {}
+  }
+  if (window.requestIdleCallback) window.requestIdleCallback(render, { timeout: 600 });
+  else setTimeout(render, 0);
+}
+
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let chartObserver;
 function growBar(bar, delay = 0) {
@@ -55,10 +72,52 @@ function chart(result) {
   const plot = $('#chart');
   chartObserver?.disconnect();
   plot.replaceChildren();
+  plot.classList.remove('inspecting');
   const max = Math.max(...result.bins.map(bin => bin.probability));
+  const currentBin = result.bins.find(bin => bin.current);
+  let touchPointer = null, inspected = null;
   function display(bin) {
     $('#bininfo').textContent = (bin.current ? '你的区间 · ' : '所选区间 · ') + binDescription(bin);
   }
+  function clearInspection() {
+    inspected?.classList.remove('inspected');
+    inspected = null;
+    plot.classList.remove('inspecting');
+  }
+  function scrub(event) {
+    if (event.pointerId !== touchPointer) return;
+    const { left, width } = plot.getBoundingClientRect();
+    const offset = Math.floor((event.clientX - left) / width * result.bins.length);
+    const index = Math.min(result.bins.length - 1, Math.max(0, offset));
+    const button = plot.children[index];
+    if (!button || button === inspected) return;
+    inspected?.classList.remove('inspected');
+    inspected = button;
+    inspected.classList.add('inspected');
+    const bin = result.bins[index];
+    plot.classList.toggle('inspecting', !bin.current);
+    display(bin);
+  }
+  plot.onpointerdown = event => {
+    if (event.pointerType !== 'touch' || !event.isPrimary) return;
+    touchPointer = event.pointerId;
+    plot.setPointerCapture(touchPointer);
+    chartObserver?.disconnect();
+    plot.classList.remove('waiting');
+    scrub(event);
+  };
+  plot.onpointermove = scrub;
+  plot.onpointerup = event => {
+    if (event.pointerId !== touchPointer) return;
+    scrub(event);
+    touchPointer = null;
+  };
+  plot.onpointercancel = plot.onlostpointercapture = event => {
+    if (event.pointerId !== touchPointer) return;
+    touchPointer = null;
+    clearInspection();
+    display(currentBin);
+  };
   for (const bin of result.bins) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -68,14 +127,18 @@ function chart(result) {
     const bar = document.createElement('span');
     bar.style.height = bin.probability / max * 100 + '%';
     button.append(bar);
-    for (const event of ['pointerenter', 'focus']) button.addEventListener(event, () => display(bin));
+    for (const event of ['pointerenter', 'focus']) button.addEventListener(event, e => {
+      if (touchPointer !== null || e.pointerType === 'touch') return;
+      clearInspection();
+      display(bin);
+    });
     button.addEventListener('click', () => {
       display(bin);
       growBar(bar);
     });
     plot.append(button);
   }
-  display(result.bins.find(bin => bin.current));
+  display(currentBin);
   const first = result.bins[0], last = result.bins[result.bins.length - 1];
   $('#minaxis').textContent = first.tail ? '≤ ' + number(first.high) + ' 抽' : number(first.low) + ' 抽';
   $('#maxaxis').textContent = last.tail ? '≥ ' + number(last.low) + ' 抽' : number(last.high) + ' 抽';
@@ -100,6 +163,7 @@ async function calculate(p,c,a,kind='self',jump=false,submitSample=false){
  $('#score').innerHTML=score(r.percentile)+'<small>%</small>';$('#sample-badge').hidden=kind==='demo';$('#sample-badge').textContent=kind==='friend'?'好友鉴定票':kind==='self'?'鉴定完成':'';
  $('#tier').textContent=tier(r.percentile);$('#summary').textContent=pools[r.pool]+' · '+r.count+' 个 UP · 平均 '+number(r.average)+' 抽';chart(r);
  showSampleRank(r,submitSample);
+ if(kind!=='demo')prepareTicket(r);
  if(jump&&matchMedia('(max-width:680px)').matches)document.querySelector('.report').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'})
  }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}finally{if(id===requestId)$('#run').disabled=false}
 }
@@ -168,16 +232,15 @@ $('#share').onclick = async () => {
   const result = active, demo = mode === 'demo', url = sharedUrl(result);
   showDialog('调频车票', `
     <div class="ticket-stage">
-      <div class="ticket-surface" tabindex="0" role="group" aria-label="调频车票，可轻拨票面或使用方向键" aria-describedby="tilt-hint">
-
+      <div class="ticket-surface" role="group" aria-label="调频车票" aria-describedby="tilt-hint" aria-busy="true">
+        <div class="ticket-loading" aria-hidden="true"></div>
       </div>
       <span class="tilt-hint" id="tilt-hint" role="status">正在出票…</span>
     </div>
     <div class="ticket-controls"><div class="modal-buttons">
       <button class="modal-action" type="button" id="save-ticket" disabled>保存车票 PNG</button>
       <button class="modal-action" type="button" id="copy">复制结果链接</button>
-    </div></div>`);
-  dialog.classList.add('ticket-dialog');
+    </div></div>`, true);
   const surface = contents.querySelector('.ticket-surface');
   const hint = contents.querySelector('.tilt-hint');
   const save = contents.querySelector('#save-ticket');
@@ -195,10 +258,7 @@ $('#share').onclick = async () => {
     }
   };
   try {
-    const [{ getTicket }, { enableTicketTilt }] = await Promise.all([
-      import('./ticket.js'),
-      import('./ticket-preview.js')
-    ]);
+    const [{ getTicket }, { enableTicketTilt }] = await loadTicketModules();
     if (!dialog.open || !surface.isConnected) return;
     const ticket = getTicket(result,tier(result.percentile),demo,ticketScale(),url);
     const picture = await ticket.preview;
@@ -207,6 +267,9 @@ $('#share').onclick = async () => {
     picture.setAttribute('role','img');
     picture.setAttribute('aria-label',pools[result.pool]+'调频车票，'+result.count+' 个 UP，欧气百分位 '+score(result.percentile)+'%');
     surface.replaceChildren(picture);
+    surface.setAttribute('aria-busy', 'false');
+    surface.setAttribute('aria-label', '调频车票，可轻拨票面或使用方向键');
+    surface.tabIndex = 0;
     enableTicketTilt(surface);
     hint.textContent = reducedMotion.matches ? '' : '按住票面轻拨，松手回正';
     save.disabled = false;
@@ -231,6 +294,9 @@ $('#share').onclick = async () => {
       }
     };
   } catch {
+    if (!dialog.open || !surface.isConnected) return;
+    surface.replaceChildren();
+    surface.setAttribute('aria-busy', 'false');
     hint.textContent = '票面未能生成，请关闭后重试。';
   }
 };

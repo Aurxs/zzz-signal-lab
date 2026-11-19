@@ -3,13 +3,23 @@ dialog{padding:0;width:min(520px,calc(100% - 24px));max-height:88dvh;color:var(-
 @media(min-width:1500px){.poster{height:310px}}@media(max-width:900px){main{width:calc(100% - 40px)}.console,.report-inner{padding:17px}.work-grid{gap:14px;grid-template-columns:1fr 1.07fr}.tech{font-size:10px;letter-spacing:.5px}.panel-heading h3{font-size:21px}.hero-copy h1{font-size:62px}.poster{min-height:235px;height:25vw}.hero-copy{padding-left:30px}.verdict{gap:6px}.verdict p{font-size:13px}.seal{width:62px;height:62px;margin-right:3px}.pool-group button{font-size:14px}}
 @media(max-width:680px){main{width:calc(100% - 26px)}.poster{height:213px;min-height:0;background-image:url(hero-mobile.webp);background-size:auto 100%;background-position:62% center}.hero-copy{padding-left:15px}.hero-kicker{font-size:11px;padding:3px 7px}.hero-copy h1{font-size:clamp(43px,8.9vw,58px);-webkit-text-stroke:.8px;letter-spacing:-.09em;margin-top:7px}.en-title{font-size:clamp(18px,4vw,24px);gap:7px;letter-spacing:-1px}.speed{width:24px;height:11px}.hero-copy p{font-size:12px;max-width:160px;line-height:1.6;margin-top:10px;text-wrap:pretty}.poster:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#f2e8d8 0%,#f2e8d8f2 22%,#f2e8d8bb 40%,transparent 60%);z-index:0}.hero-copy{z-index:1}.tape{height:24px}.tape div{font-size:10px}.section-heading{gap:8px;margin:22px 0 10px}.section-heading h2{font-size:21px}.section-en{font-size:10px;letter-spacing:.6px}.work-grid{grid-template-columns:1fr;gap:16px}main{padding-top:14px}.console,.report-inner{padding:18px}.panel-heading h3{font-size:22px}.tech{font-size:11px}.seal{width:72px;height:72px}.score{font-size:68px}.chart{height:63px}.verdict p{font-size:14px}.run{min-height:46px}.section-heading h2{gap:7px}footer{gap:6px;flex-wrap:wrap}.reg.tl{top:6px;left:6px}.hero-copy p{background:#f1e7d7ae;max-width:163px}.fields input{font-size:23px}}@media(max-width:375px){.section-en{display:none}.poster{height:185px}main{width:calc(100% - 20px)}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
-.chart { height: 68px; }
+.chart { height: 68px; touch-action: pan-y pinch-zoom; }
 .chart button span { transform-origin: center bottom; }
 .chart button.tail span {
   background-image: repeating-linear-gradient(125deg, transparent 0 2px, #161b184f 2px 3px);
 }
+.chart.inspecting button.current span { background-color:#727969; }
+.chart button.inspected span { background-color:var(--orange); outline:1px solid #8b421f; }
 @media (prefers-reduced-motion: no-preference) {
   .chart.waiting button span { transform: scaleY(0); }
+}
+
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("fonts/barlow-condensed-black-italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 900;
+  font-display: swap;
 }
 
 dialog.ticket-dialog {
@@ -30,6 +40,7 @@ dialog.ticket-dialog {
 .ticket-surface {
   --pitch:0deg; --yaw:0deg; --dx:0px; --dy:0px;
   position:relative;
+  aspect-ratio:1160 / 512;
   touch-action: none;
   cursor: grab;
   user-select:none;
@@ -41,7 +52,27 @@ dialog.ticket-dialog {
 .ticket-surface.held { cursor:grabbing; transition:transform 65ms ease-out; }
 .ticket-surface:focus-visible { outline:2px dashed var(--lime); outline-offset:3px; }
 .ticket-paper { display:block; width:100%; height:auto; pointer-events:none; filter:drop-shadow(2px 6px 4px #10120dab); }
-.tilt-hint { display:block; margin:12px auto 0; color:#c9cdbf; font-size:13px; }
+.ticket-loading {
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  cursor:wait;
+  background:linear-gradient(90deg, var(--paper) 74%, var(--lime) 74%);
+}
+.ticket-loading::after {
+  content:"";
+  width:30px;
+  aspect-ratio:1;
+  border:3px solid #1b1e1933;
+  border-top-color:var(--ink);
+  border-radius:50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ticket-loading::after { animation:ticket-spin .75s linear infinite; }
+}
+@keyframes ticket-spin { to { transform:rotate(1turn); } }
+.tilt-hint { display:block; min-height:1.5em; margin:12px auto 0; color:#c9cdbf; font-size:13px; }
 .ticket-controls { padding:16px 20px; }
 
 .ticket-controls #copy { background:var(--paper); }

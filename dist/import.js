@@ -2,6 +2,22 @@ const asset = path => new URL(path, import.meta.url).href;
 const limits = {agent:180,engine:160};
 let activeDialog;
 
+async function startOcr() {
+  const [{ default: T }, { scanScreenshot }] = await Promise.all([
+    import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js')
+  ]);
+  const worker = await T.createWorker('chi_sim', 1, {
+    workerPath: asset('./ocr/worker.min.js'),
+    workerBlobURL: false,
+    langPath: asset('./ocr/'),
+    corePath: asset('./ocr/tesseract-core-lstm.wasm.js'),
+    cachePath: 'signal-lab-ocr-v1',
+    cacheMethod: 'write',
+    errorHandler: () => {}
+  });
+  return { worker, scanScreenshot };
+}
+
 export function openImport(initialPool='agent',callback=()=>{},sampleAvailability) {
   activeDialog?.close();
   const dialog=document.createElement('dialog');
@@ -29,6 +45,7 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
   const confirm=q('.sg-confirm'), sampleConsent=q('.sg-sample');
   const {pool,count,avg,submitSample}=form.elements;
   let job=0, worker=null, url='', result=null, samplesAvailable=false;
+  let preloadedOcr;
   const edits={};
   const preferred=Object.hasOwn(limits,initialPool)?initialPool:'agent';
   function stopWorker(){
@@ -71,7 +88,11 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     edits[pool.value]={count:count.value,avg:avg.value};updateConfirm();
   };
   dialog.addEventListener('close',()=>{
-    job++;stopWorker();if(url)URL.revokeObjectURL(url);
+    job++;
+    stopWorker();
+    preloadedOcr?.then(ocr=>ocr?.worker.terminate()).catch(()=>{});
+    preloadedOcr=null;
+    if(url)URL.revokeObjectURL(url);
     dialog.remove();if(activeDialog===dialog)activeDialog=null;
   },{once:true});
   q('[data-close]').onclick=()=>dialog.close();
@@ -97,19 +118,15 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     upload.hidden=true;preview.hidden=false;q('.sg-imgtools').hidden=false;
     const progress=text=>{if(current())status.textContent=text;};
     progress('正在启动本机文字识别…');
+    const pending=preloadedOcr;
+    preloadedOcr=null;
     let failed=false;
     try{
-      const [{default:T},{scanScreenshot}] = await Promise.all([
-        import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js')
-      ]);
-      if(!current())return;
-      const localWorker=await T.createWorker('chi_sim',1,{
-        workerPath:asset('./ocr/worker.min.js'),workerBlobURL:false,langPath:asset('./ocr/'),
-        corePath:asset('./ocr/tesseract-core-lstm.wasm.js'),cacheMethod:'none',errorHandler:()=>{}
-      });
-      if(!current()){await localWorker.terminate();return;}
-      worker=localWorker;
-      const found=await scanScreenshot(img,worker,current,progress);
+      let ocr=await pending;
+      if(!ocr&&current())ocr=await startOcr();
+      if(!current()){await ocr?.worker.terminate();return;}
+      worker=ocr.worker;
+      const found=await ocr.scanScreenshot(img,worker,current,progress);
       if(!current())return;
       result=found;
     }catch{
@@ -136,4 +153,5 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     dialog.close();callback(record);
   };
   dialog.showModal();
+  preloadedOcr=startOcr().catch(()=>null);
 }
