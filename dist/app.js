@@ -162,7 +162,7 @@ async function calculate(p,c,a,kind='self',jump=false,submitSample=false){
  try{const r=await LuckModel.analyze(p,c,a);if(id!==requestId)return;active=r;mode=kind;
  $('#score').innerHTML=score(r.percentile)+'<small>%</small>';$('#sample-badge').hidden=kind==='demo';$('#sample-badge').textContent=kind==='friend'?'好友鉴定票':kind==='self'?'鉴定完成':'';
  $('#tier').textContent=tier(r.percentile);$('#summary').textContent=pools[r.pool]+' · '+r.count+' 个 UP · 平均 '+number(r.average)+' 抽';chart(r);
- showSampleRank(r,submitSample);
+ showSampleSubmission(r,submitSample);
  if(kind!=='demo')prepareTicket(r);
  if(jump&&matchMedia('(max-width:680px)').matches)document.querySelector('.report').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'})
  }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}finally{if(id===requestId)$('#run').disabled=false}
@@ -182,7 +182,7 @@ async function sampleIsAvailable() {
   }
 }
 
-function showSampleRank(result,shouldSubmit) {
+function showSampleSubmission(result,shouldSubmit) {
   const output=$('#sample-rank');
   output.hidden=!shouldSubmit;
   output.replaceChildren();
@@ -203,11 +203,8 @@ function showSampleRank(result,shouldSubmit) {
         body:JSON.stringify({pool,count,total,device})
       });
       if(!response.ok)throw Error();
-      const rank=await response.json();
       if(active!==result)return;
-      output.textContent=rank.size===1
-        ? '本站样本榜 · 同组首份样本，暂待更多记录。'
-        : '本站自选样本 · 同组 '+rank.size+' 份，样本欧气百分位 '+score(rank.percentile)+'%。';
+      output.textContent='匿名提交成功。';
     } catch {
       if(active!==result)return;
       const retry=document.createElement('button');
