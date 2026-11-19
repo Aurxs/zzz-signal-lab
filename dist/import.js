@@ -2,7 +2,7 @@ const asset = path => new URL(path, import.meta.url).href;
 const limits = {agent:180,engine:160};
 let activeDialog;
 
-export function openImport(initialPool='agent',callback=()=>{}) {
+export function openImport(initialPool='agent',callback=()=>{},sampleAvailability) {
   activeDialog?.close();
   const dialog=document.createElement('dialog');
   dialog.className='sg-import';
@@ -19,14 +19,16 @@ export function openImport(initialPool='agent',callback=()=>{}) {
       <label>统计频段<select name="pool"><option value="agent">限定代理人 · 独家频段</option><option value="engine">限定音擎 · 音擎频段</option></select></label>
       <label>限定 UP 数量<input name="count" type="number" inputmode="numeric" min="1" max="100000" step="1" required placeholder="未读清"></label>
       <label>平均每 UP 抽数<input name="avg" type="number" inputmode="decimal" min="1" step="any" required placeholder="未读清"></label>
+      <label class="sg-sample" hidden><input name="submitSample" type="checkbox"><span>匿名提交到样本榜<small>确认后提交卡池、UP 数、总抽数和随机设备标识。截图留在本机。</small></span></label>
       <button type="submit" class="sg-confirm" disabled>确认数据并鉴定</button>
     </fieldset>
   </section></div></form>`;
   document.body.append(dialog);activeDialog=dialog;
   const q=s=>dialog.querySelector(s), form=q('form'), fields=q('fieldset'), img=q('img');
   const status=q('.sg-status'), preview=q('.sg-preview'), upload=q('.sg-upload'), fileInput=q('[type=file]');
-  const confirm=q('.sg-confirm'), {pool,count,avg}=form.elements;
-  let job=0, worker=null, url='', result=null;
+  const confirm=q('.sg-confirm'), sampleConsent=q('.sg-sample');
+  const {pool,count,avg,submitSample}=form.elements;
+  let job=0, worker=null, url='', result=null, samplesAvailable=false;
   const edits={};
   const preferred=Object.hasOwn(limits,initialPool)?initialPool:'agent';
   function stopWorker(){
@@ -36,17 +38,35 @@ export function openImport(initialPool='agent',callback=()=>{}) {
   function updateConfirm(){
     confirm.disabled=fields.disabled||!count.value||!avg.value||!form.checkValidity();
   }
+  function recognizedRecord() {
+    if (result?.channels.length) return result.records[pool.value];
+    if (pool.value===preferred) return result?.records.unknown;
+  }
+  function updateSampleConsent() {
+    const recognized=recognizedRecord();
+    sampleConsent.hidden=!samplesAvailable||!(recognized?.count||recognized?.avg);
+    if(sampleConsent.hidden)submitSample.checked=false;
+  }
+  sampleAvailability?.then(available=>{
+    if(!dialog.open)return;
+    samplesAvailable=available;
+    updateSampleConsent();
+  });
   function showPool(){
     const selected=pool.value;
     avg.max=limits[selected];
-    const record=edits[selected]??(result.channels.length?result.records[selected]:(selected===preferred?result.records.unknown:{}));
+    const record=edits[selected]??recognizedRecord();
     count.value=record?.count??'';avg.value=record?.avg??'';
     const context=result.channels.length>1?'已识别多个频段，可切换核对。':result.channels.length?'':'频段沿用工作台选择，请核对。';
     const missing=[!count.value&&'UP 数量',!avg.value&&'平均抽数'].filter(Boolean);
     status.textContent=missing.length?context+'未读清'+missing.join('和')+'，可换一张清晰原图或补正后确认。':context+'请核对这两个数字，确认后生成报告。';
+    updateSampleConsent();
     updateConfirm();
   }
-  pool.onchange=showPool;
+  pool.onchange=()=>{
+    submitSample.checked=false;
+    showPool();
+  };
   for(const field of [count,avg])field.oninput=()=>{
     edits[pool.value]={count:count.value,avg:avg.value};updateConfirm();
   };
@@ -67,6 +87,7 @@ export function openImport(initialPool='agent',callback=()=>{}) {
     const current=()=>version===job && dialog.open;
     stopWorker();result=null;delete edits.agent;delete edits.engine;
     fields.hidden=fields.disabled=confirm.disabled=true;
+    updateSampleConsent();
     count.value=avg.value='';
     if(url)URL.revokeObjectURL(url);
     url=URL.createObjectURL(file);img.src=url;
@@ -106,7 +127,12 @@ export function openImport(initialPool='agent',callback=()=>{}) {
   form.onsubmit=e=>{
     e.preventDefault();
     if(!result||fields.disabled||!form.reportValidity())return;
-    const record={pool:pool.value,count:count.valueAsNumber,avg:avg.valueAsNumber};
+    const record={
+      pool:pool.value,
+      count:count.valueAsNumber,
+      avg:avg.valueAsNumber,
+      submitSample:!sampleConsent.hidden&&submitSample.checked
+    };
     dialog.close();callback(record);
   };
   dialog.showModal();

@@ -22,7 +22,7 @@ const pools={agent:'限定代理人',engine:'限定音擎'};
 const number=v=>Number(v.toFixed(2)).toString();
 const score=v=>v.toFixed(1);
 const tier=v=>v>=97?'欧皇驾到':v>=75?'欧气上扬':v>=55?'手气不错':v>=45?'信号平稳':v>=25?'欧气蓄力':v>=3?'逆风调频':'保底常客';
-let pool='agent', active=null, mode='demo', fromScreenshot=false, requestId=0;
+let pool='agent', active=null, mode='demo', requestId=0;
 const dialog=$('#dialog'), contents=$('#dialog-content');
 function readStored(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}}
 function writeStored(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
@@ -30,8 +30,7 @@ function showDialog(title,html){dialog.classList.remove('ticket-dialog');$('#dia
 $('#close').onclick=()=>dialog.close();
 dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
 function choosePool(p){if(!(p in pools))return;pool=p;$('#avg').max=p==='agent'?180:160;document.querySelectorAll('[data-pool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pool===p)))}
-document.querySelectorAll('[data-pool]').forEach(b=>b.onclick=()=>{if(b.dataset.pool!==pool){choosePool(b.dataset.pool);fromScreenshot=false}});
-$('#entry').addEventListener('input',()=>{fromScreenshot=false});
+document.querySelectorAll('[data-pool]').forEach(b=>b.onclick=()=>choosePool(b.dataset.pool));
 function binDescription(bin) {
   const chance = bin.probability > 0 && bin.probability < .0001 ? '<0.01' : number(bin.probability * 100);
   return (bin.tail ? '尾部合并 · ' : '') + number(bin.low) + '–' + number(bin.high) + ' 抽/UP，占 ' + chance + '%';
@@ -104,25 +103,68 @@ function chart(result) {
   }
 }
 function setForm(r){choosePool(r.pool);$('#count').value=r.count;$('#avg').value=r.enteredAverage??r.average}
-async function calculate(p,c,a,kind='self',isScreenshot=false,jump=false){
+async function calculate(p,c,a,kind='self',jump=false,submitSample=false){
  const id=++requestId;$('#err').hidden=true;$('#run').disabled=true;
  try{const r=await LuckModel.analyze(p,c,a);if(id!==requestId)return;active=r;mode=kind;
  $('#score').innerHTML=score(r.percentile)+'<small>%</small>';$('#sample-badge').hidden=kind==='demo';$('#sample-badge').textContent=kind==='friend'?'好友鉴定票':kind==='self'?'鉴定完成':'';
  $('#tier').textContent=tier(r.percentile);$('#summary').textContent=pools[r.pool]+' · '+r.count+' 个 UP · 平均 '+number(r.average)+' 抽';chart(r);
- sampleOption(r,isScreenshot);
+ showSampleRank(r,submitSample);
  prepareTicketWhenIdle(r,kind==='demo');
  if(jump&&matchMedia('(max-width:680px)').matches)document.querySelector('.report').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'})
  }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}finally{if(id===requestId)$('#run').disabled=false}
 }
-$('#entry').onsubmit=e=>{e.preventDefault();calculate(pool,$('#count').valueAsNumber,$('#avg').valueAsNumber,'self',fromScreenshot,true)};
+$('#entry').onsubmit=e=>{e.preventDefault();calculate(pool,$('#count').valueAsNumber,$('#avg').valueAsNumber,'self',true)};
 $('#import').onclick=()=>openImport(pool,r=>{
   setForm({pool:r.pool,count:r.count,average:r.avg});
-  fromScreenshot=true;
-  calculate(r.pool,r.count,r.avg,'self',true,true);
-});
-async function sampleOption(r,allowed){const el=$('#sample-rank');el.hidden=true;el.replaceChildren();if(!allowed)return;
- try{const res=await fetch('./api/sample');if(!res.ok||!res.headers.get('Content-Type')?.includes('json')||!(await res.json()).available)return}catch{return}if(active!==r)return;
- el.hidden=false;el.innerHTML='<p>自愿加入本站样本榜，仅提交卡池、UP 数、总抽数和随机设备标识。同池同 UP 数的投稿参与排名。</p><button type="button">匿名提交并查看样本排名</button>';const btn=el.querySelector('button');btn.onclick=async()=>{btn.disabled=true;try{let device=readStored('signal.device',null);if(!device){device=crypto.randomUUID();if(!writeStored('signal.device',device))throw Error()}const res=await fetch('./api/sample',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pool:r.pool,count:r.count,total:r.total,device})});if(!res.ok)throw Error();const rank=await res.json();if(active!==r)return;el.textContent=rank.size===1?'本站样本榜 · 同组首份样本，暂待更多记录。':'本站自选样本 · 同组 '+rank.size+' 份，样本欧气百分位 '+score(rank.percentile)+'%。'}catch{btn.disabled=false;btn.textContent='提交失败，点此重试'}}}
+  calculate(r.pool,r.count,r.avg,'self',true,r.submitSample);
+},sampleIsAvailable());
+
+async function sampleIsAvailable() {
+  try {
+    const response=await fetch('./api/sample');
+    return response.ok&&(await response.json()).available===true;
+  } catch {
+    return false;
+  }
+}
+
+function showSampleRank(result,shouldSubmit) {
+  const output=$('#sample-rank');
+  output.hidden=!shouldSubmit;
+  output.replaceChildren();
+  if(!shouldSubmit)return;
+
+  async function submit() {
+    output.textContent='正在提交样本…';
+    try {
+      let device=readStored('signal.device',null);
+      if(!device){
+        device=crypto.randomUUID();
+        if(!writeStored('signal.device',device))throw Error();
+      }
+      const {pool,count,total}=result;
+      const response=await fetch('./api/sample',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({pool,count,total,device})
+      });
+      if(!response.ok)throw Error();
+      const rank=await response.json();
+      if(active!==result)return;
+      output.textContent=rank.size===1
+        ? '本站样本榜 · 同组首份样本，暂待更多记录。'
+        : '本站自选样本 · 同组 '+rank.size+' 份，样本欧气百分位 '+score(rank.percentile)+'%。';
+    } catch {
+      if(active!==result)return;
+      const retry=document.createElement('button');
+      retry.type='button';
+      retry.textContent='提交失败，点此重试';
+      retry.onclick=submit;
+      output.replaceChildren(retry);
+    }
+  }
+  submit();
+}
 function rules(){showDialog('概率模型说明','<h3>同样拿到这些 UP，你有多欧？</h3><p>把你和同卡池、同 UP 数量的理论记录比较。用抽更少，欧气百分位更高。若显示 80%，约八成记录花了更多抽，并列记录各计一半。</p><h3>从零垫抽、无大保底开始</h3><p>只统计常规限定频道，截止最后一个限定 UP。每次拿到非当期 S 级后，下一个 S 级必为当期 UP。代理人基础 S 率 0.6%，当期概率 50%，90 抽硬保底。音擎分别为 1%、75% 和 80 抽。</p><h3>软保底采用社区模型</h3><p>代理人从第 74 抽、音擎从第 65 抽起，每抽增加 6 个百分点。软保底曲线是社区估计，具体差异会影响百分位。</p><p>1–100 个 UP 使用预计算概率表，101–100,000 个 UP 在本机按需计算离散卷积。浏览器会缓存近期使用的概率表，同池同 UP 数可直接复用。平均抽数乘以 UP 数后取最近整数还原总抽数，截图均值的舍入可能使结果略有变化。</p><p class="muted"><a href="'+LuckModel.source+'" target="_blank" rel="noopener">查看社区调频模型 ↗</a></p>')}
 $('#footer-rules').onclick=rules;
 function sharedUrl(result) {

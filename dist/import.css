@@ -22,8 +22,11 @@ dialog.sg-import{--sg-ink:#1c1e1b;--sg-paper:#f3f1e8;--sg-acid:#caff22;position:
 .sg-imgtools button{font-weight:650;font-size:14px;background:transparent;border:0;text-decoration:underline;text-underline-offset:3px;padding:4px 1px}
 .sg-fields label{font-weight:750;font-size:14px;display:block;color:var(--sg-ink);margin-top:10px}
 .sg-fields label:first-child{margin-top:0}
-.sg-fields select,.sg-fields input{display:block;color:var(--sg-ink);font:650 16px/1.4 system-ui,sans-serif;background:#fffef9;border:1.5px solid var(--sg-ink);border-radius:0;padding:8px 10px;width:100%;min-height:41px;margin:4px 0 0}
+.sg-fields select,.sg-fields input[type=number]{display:block;color:var(--sg-ink);font:650 16px/1.4 system-ui,sans-serif;background:#fffef9;border:1.5px solid var(--sg-ink);border-radius:0;padding:8px 10px;width:100%;min-height:41px;margin:4px 0 0}
 .sg-fields select{appearance:none;background:#fffef9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='m1 1 6 6 6-6' fill='none' stroke='%2320231f' stroke-width='2'/%3E%3C/svg%3E") right 11px center/14px no-repeat;padding-right:30px}
+.sg-fields .sg-sample{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
+.sg-sample input{flex:none;width:16px;height:16px;margin:3px 0 0;accent-color:#547500}
+.sg-sample small{display:block;color:#464a3e;font-size:12px;font-weight:500}
 .sg-status{font-size:14px;line-height:1.5;margin:14px 0;color:#464a3e}
 .sg-confirm{width:100%;background:var(--sg-acid);border:2px solid var(--sg-ink);min-height:44px;font-weight:800!important;box-shadow:2px 2px var(--sg-ink)}
 .sg-confirm:disabled{background:#d9dbcf;color:#595d54;box-shadow:none;cursor:default}
