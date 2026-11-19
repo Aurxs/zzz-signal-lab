@@ -35,7 +35,7 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
       <label>统计频段<select name="pool"><option value="agent">限定代理人 · 独家频段</option><option value="engine">限定音擎 · 音擎频段</option></select></label>
       <label>限定 UP 数量<input name="count" type="number" inputmode="numeric" min="1" max="100000" step="1" required placeholder="未读清"></label>
       <label>平均每 UP 抽数<input name="avg" type="number" inputmode="decimal" min="1" step="any" required placeholder="未读清"></label>
-      <label class="sg-sample" hidden><input name="submitSample" type="checkbox"><span>匿名提交到样本榜<small>确认后提交卡池、UP 数、总抽数和随机设备标识。截图留在本机。</small></span></label>
+      <label class="sg-sample" hidden><input name="submitSample" type="checkbox"><span>匿名提交到样本榜<small>仅限未经修改的识别结果。确认后提交卡池、UP 数、总抽数和随机设备标识。截图留在本机。</small></span></label>
       <button type="submit" class="sg-confirm" disabled>确认数据并鉴定</button>
     </fieldset>
   </section></div></form>`;
@@ -59,9 +59,19 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     if (result?.channels.length) return result.records[pool.value];
     if (pool.value===preferred) return result?.records.unknown;
   }
+  function canSubmitSample() {
+    const selected=pool.value;
+    const recognized=result?.records[selected];
+    return samplesAvailable
+      && result?.channels.includes(selected)===true
+      && !Object.hasOwn(edits,selected)
+      && Number.isInteger(recognized?.count)
+      && Number.isFinite(recognized?.avg)
+      && recognized.count===count.valueAsNumber
+      && recognized.avg===avg.valueAsNumber;
+  }
   function updateSampleConsent() {
-    const recognized=recognizedRecord();
-    sampleConsent.hidden=!samplesAvailable||!(recognized?.count||recognized?.avg);
+    sampleConsent.hidden=!canSubmitSample();
     if(sampleConsent.hidden)submitSample.checked=false;
   }
   sampleAvailability?.then(available=>{
@@ -85,7 +95,9 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     showPool();
   };
   for(const field of [count,avg])field.oninput=()=>{
-    edits[pool.value]={count:count.value,avg:avg.value};updateConfirm();
+    edits[pool.value]={count:count.value,avg:avg.value};
+    updateSampleConsent();
+    updateConfirm();
   };
   dialog.addEventListener('close',()=>{
     job++;
@@ -148,7 +160,7 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
       pool:pool.value,
       count:count.valueAsNumber,
       avg:avg.valueAsNumber,
-      submitSample:!sampleConsent.hidden&&submitSample.checked
+      submitSample:submitSample.checked&&canSubmitSample()
     };
     dialog.close();callback(record);
   };

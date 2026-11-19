@@ -1,4 +1,4 @@
-import { openImport } from './import.js';
+import { openImport } from './import.js?v=2';
 
 const $ = s => document.querySelector(s);
 const icons = {
