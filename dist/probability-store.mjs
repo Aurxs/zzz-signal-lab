@@ -67,7 +67,11 @@ export function getTable(key, build) {
   if (pending.has(key)) return pending.get(key);
   const lookup = (async () => {
     let value = await stored(key);
-    if (value === undefined) { value = await build(); await save(key,value); }
+    if (value === undefined) {
+      value = await build();
+      // Let the report use the in-memory table before IndexedDB clones and commits it.
+      setTimeout(() => save(key,value), 0);
+    }
     available.set(key,value);
     if (available.size > 6) available.delete(available.keys().next().value);
     return value;

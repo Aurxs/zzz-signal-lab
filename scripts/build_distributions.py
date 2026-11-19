@@ -1,5 +1,7 @@
 """Rebuild the probability tables with Python 3 and NumPy."""
+import base64
 from pathlib import Path
+import re
 import struct
 import numpy as np
 
@@ -37,8 +39,16 @@ def generate(pool, params):
         start, end = np.flatnonzero(data)[[0, -1]]
         packed = data[start:end + 1]
         assert abs(packed.sum(dtype=np.float64) - 1.) < 1e-7
-        buffer.extend(struct.pack("<II", int(start), len(packed)))
-        buffer.extend(packed.tobytes())
+        table = struct.pack("<II", int(start), len(packed)) + packed.tobytes()
+        buffer.extend(table)
+        if pool == "agent" and n == 5:
+            page = DEST.parent / "index.html"
+            encoded = base64.b64encode(table).decode("ascii")
+            html, replacements = re.subn(r'data-agent-five="[^"]*"',
+                                         f'data-agent-five="{encoded}"', page.read_text())
+            if replacements != 1:
+                raise ValueError("Missing or duplicate starter probability table in index.html")
+            page.write_text(html)
         if n % CHUNK == 0:
             (DEST / f"{pool}-{n // CHUNK - 1}.bin").write_bytes(buffer)
             buffer.clear()

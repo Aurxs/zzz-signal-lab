@@ -6,9 +6,16 @@ const { pathToFileURL } = require("node:url");
 global.window = global;
 global.document = { currentScript: { src: pathToFileURL(path.join(__dirname, "../dist/model.js")).href } };
 global.fetch = async url => new Response(await fs.readFile(url));
-require("../dist/model.js");
-
 async function check() {
+  const html = await fs.readFile(path.join(__dirname, "../dist/index.html"), "utf8");
+  const [, encoded] = html.match(/data-agent-five="([^"]+)"/);
+  const group = await fs.readFile(path.join(__dirname, "../dist/model-data/agent-0.bin"));
+  let offset = 0;
+  for (let n = 1; n < 5; n++) offset += 8 + 4 * group.readUInt32LE(offset + 4);
+  const end = offset + 8 + 4 * group.readUInt32LE(offset + 4);
+  assert.deepEqual(Buffer.from(encoded, "base64"), group.subarray(offset, end));
+  document.currentScript.dataset = { agentFive: encoded };
+  require("../dist/model.js");
   for (const [pool, topPercentile, expectedMean] of [
     ["agent", 99.85, 93.44599806], ["engine", 99.625, 62.36623164]
   ]) {

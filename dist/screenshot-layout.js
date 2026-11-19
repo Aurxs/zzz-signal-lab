@@ -92,9 +92,6 @@ export function readLayout(words, singleCard=false) {
       const num=Number(v.text);
       if(num<1 || (kind==='count'?(!Number.isInteger(num)||num>100000):num>(pool==='engine'?160:180)))continue;
       const sameRow=Math.abs(v.y-anchor.y)<.65*Math.max(v.h,anchor.h);
-      const owner=owningHeader(v,headings);
-      // Values printed above labels can precede a header only if that header is on their row.
-      if(owner!==header)continue;
       const height=Math.max(anchor.h,v.h);
       let distance=Infinity;
       if(sameRow && v.x0>=anchor.x1-1)distance=(v.x0-anchor.x1)/height;
@@ -103,6 +100,7 @@ export function readLayout(words, singleCard=false) {
         distance=2+Math.abs(v.y-anchor.y)/height+Math.abs(v.x-anchor.x)/height;
       }
       if(distance>8)continue;
+      if(owningHeader(v,headings)!==header)continue;
       // Never cross another metric label on the way to a value.
       if(sameRow && anchors.some(a=>a!==anchor && Math.abs(a.y-anchor.y)<height*.6 && a.x>Math.min(v.x,anchor.x)&&a.x<Math.max(v.x,anchor.x)))continue;
       possible.push({num,distance,value:v});

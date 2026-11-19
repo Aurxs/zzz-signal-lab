@@ -4,7 +4,12 @@
   const source = "https://hoyobuild.com/en/zzz/tools/wish-simulator";
   const folder = new URL("model-data/", document.currentScript.src);
   const maxCount = 100000;
-  const store = import(new URL('../probability-store.mjs', folder));
+  const starterData = document.currentScript.dataset?.agentFive;
+  let starterTable;
+  let store;
+  function tableStore() {
+    return store ??= import(new URL('../probability-store.mjs?v=2', folder));
+  }
   const workerFile = new URL('../probability-worker.mjs',folder);
   function computeLarge(pool, count) {
     if (typeof Worker === 'undefined') {
@@ -25,26 +30,42 @@
     });
   }
 
-  async function loadTables(pool, group) {
+  function readTable(payload, offset) {
+    const first = payload.getUint32(offset, true);
+    const size = payload.getUint32(offset + 4, true);
+    const weights = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      weights[i] = payload.getFloat32(offset + 8 + i * 4, true);
+    }
+    return { first, weights };
+  }
+
+  async function distribution(pool, count) {
+    if (pool === 'agent' && count === 5 && starterData) {
+      if (!starterTable) {
+        const bytes = Uint8Array.from(atob(starterData), c => c.charCodeAt(0));
+        starterTable = readTable(new DataView(bytes.buffer), 0);
+      }
+      return starterTable;
+    }
+    const { getTable } = await tableStore();
+    if (count > 100) return getTable('count:'+pool+':'+count, () => computeLarge(pool,count));
+    const group = Math.floor((count - 1) / 10);
     const key = pool + "-" + group;
-    return (await store).getTable('group:'+key, async () => {
+    const tables = await getTable('group:'+key, async () => {
       const response = await fetch(new URL(key + ".bin", folder));
       if (!response.ok) throw new Error("概率表加载失败，请重试。");
       const payload = new DataView(await response.arrayBuffer());
       const tables = [];
       let offset = 0;
       for (let i = 0; i < 10; i++) {
-        const first = payload.getUint32(offset, true);
-        const size = payload.getUint32(offset + 4, true);
-        offset += 8;
-        const weights = new Float32Array(size);
-        for (let j = 0; j < size; j++, offset += 4) {
-          weights[j] = payload.getFloat32(offset, true);
-        }
-        tables.push({ first, weights });
+        const table = readTable(payload, offset);
+        tables.push(table);
+        offset += 8 + table.weights.byteLength;
       }
       return tables;
     });
+    return tables[(count - 1) % 10];
   }
 
   async function analyze(pool, count, average) {
@@ -57,10 +78,7 @@
       throw new Error("平均每 UP 抽数须在 1 至 " + limit + " 之间。");
     }
     const total = Math.round(count * average);
-    const group = Math.floor((count - 1) / 10);
-    const {first, weights} = count <= 100
-      ? (await loadTables(pool, group))[(count - 1) % 10]
-      : await (await store).getTable('count:'+pool+':'+count, () => computeLarge(pool,count));
+    const {first, weights} = await distribution(pool, count);
     let mass = 0;
     let scoreMass = 0;
     let weighted = 0;

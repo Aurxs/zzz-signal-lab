@@ -4,10 +4,10 @@ let activeDialog;
 
 async function startOcr() {
   const [{ default: T }, { scanScreenshot }] = await Promise.all([
-    import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js?v=2')
+    import(asset('./ocr/tesseract.esm.js')), import('./screenshot-scan.js?v=3')
   ]);
   const worker = await T.createWorker('chi_sim', 1, {
-    workerPath: asset('./ocr/mirror-worker.js'),
+    workerPath: asset('./ocr/mirror-worker.js?v=2'),
     workerBlobURL: false,
     langPath: asset('./ocr/'),
     corePath: asset('./ocr/tesseract-core-lstm.wasm.js'),
@@ -134,6 +134,7 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     const version=++job;
     const current=()=>version===job && dialog.open;
     stopWorker();result=null;delete edits.agent;delete edits.engine;
+    status.textContent='正在打开截图…';
     fields.hidden=fields.disabled=confirm.disabled=true;
     updateSampleConsent();
     count.value=avg.value='';
@@ -145,19 +146,24 @@ export function openImport(initialPool='agent',callback=()=>{},sampleAvailabilit
     upload.hidden=true;preview.hidden=false;q('.sg-imgtools').hidden=false;
     const progress=text=>{if(current())status.textContent=text;};
     progress('正在启动本机文字识别…');
-    const pending=preloadedOcr;
-    preloadedOcr=null;
     let failed=false;
     try{
-      let ocr=await pending;
-      if(!ocr&&current())ocr=await startOcr();
-      if(!current()){await ocr?.worker.terminate();return;}
+      // A replacement can claim the same startup until a scan actually begins.
+      let ocr=await preloadedOcr;
+      if(!current())return;
+      if(!ocr){
+        preloadedOcr=startOcr();
+        ocr=await preloadedOcr;
+        if(!current())return;
+      }
+      preloadedOcr=null;
       worker=ocr.worker;
       const found=await ocr.scanScreenshot(img,worker,current,progress,preferred);
       if(!current())return;
       result=found;
     }catch{
       if(!current())return;
+      preloadedOcr=null;
       failed=true;result={channels:[],records:{agent:{},engine:{},unknown:{}}};
     }finally{if(current() && !result?.resume)stopWorker();}
     if(!current())return;

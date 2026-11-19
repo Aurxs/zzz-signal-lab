@@ -1,4 +1,4 @@
-import { openImport } from './import.js?v=3';
+import { openImport } from './import.js?v=4';
 
 const $ = s => document.querySelector(s);
 const icons = {
@@ -159,13 +159,15 @@ function chart(result) {
 function setForm(r){choosePool(r.pool);$('#count').value=r.count;$('#avg').value=r.enteredAverage??r.average}
 async function calculate(p,c,a,kind='self',jump=false,submitSample=false){
  const id=++requestId;$('#err').hidden=true;$('#run').disabled=true;
+ const feedback=setTimeout(()=>{if(id===requestId)$('#run-label').textContent='正在鉴定…'},160);
  try{const r=await LuckModel.analyze(p,c,a);if(id!==requestId)return;active=r;mode=kind;
  $('#score').innerHTML=score(r.percentile)+'<small>%</small>';$('#sample-badge').hidden=kind==='demo';$('#sample-badge').textContent=kind==='friend'?'好友鉴定票':kind==='self'?'鉴定完成':'';
  $('#tier').textContent=tier(r.percentile);$('#summary').textContent=pools[r.pool]+' · '+r.count+' 个 UP · 平均 '+number(r.average)+' 抽';chart(r);
  showSampleSubmission(r,submitSample);
  if(kind!=='demo')prepareTicket(r);
  if(jump&&matchMedia('(max-width:680px)').matches)document.querySelector('.report').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'})
- }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}finally{if(id===requestId)$('#run').disabled=false}
+ }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}
+ finally{clearTimeout(feedback);if(id===requestId){$('#run-label').textContent='开始鉴定';$('#run').disabled=false}}
 }
 $('#entry').onsubmit=e=>{e.preventDefault();calculate(pool,$('#count').valueAsNumber,$('#avg').valueAsNumber,'self',true)};
 $('#import').onclick=()=>openImport(pool,r=>{
@@ -297,7 +299,21 @@ $('#share').onclick = async () => {
     hint.textContent = '票面未能生成，请关闭后重试。';
   }
 };
-$('#pk').onclick=()=>{if(!active)return;const a=active;showDialog('好友 PK','<p>以'+(mode==='friend'?'好友鉴定票':'当前鉴定票')+'的 <strong>'+score(a.percentile)+'%</strong> 迎战。双方分别按自己的卡池和 UP 数量计算理论百分位。</p><form class="pkform"><label>对手频道<select id="p-pool"><option value="agent">限定代理人</option><option value="engine">限定音擎</option></select></label><label>限定 UP 数量<input required id="p-count" type="number" min="1" max="100000" value="'+a.count+'"></label><label>平均每 UP 抽数<input required id="p-avg" type="number" step="any" min="1" placeholder="输入对手的数据"></label><button>对比欧气</button></form><p class="pkresult" hidden role="status"></p>');$('#p-pool').value=a.pool;const limit=()=>$('#p-avg').max=LuckModel.maxAverage[$('#p-pool').value];limit();$('#p-pool').onchange=limit;$('.pkform').onsubmit=async e=>{e.preventDefault();const box=$('.pkresult');box.hidden=false;try{const b=await LuckModel.analyze($('#p-pool').value,$('#p-count').valueAsNumber,$('#p-avg').valueAsNumber);const d=+(score(a.percentile)-score(b.percentile)).toFixed(1);box.textContent='当前票 '+score(a.percentile)+'%  /  对手 '+score(b.percentile)+'% · '+(d===0?'按展示精度打成平手。':(d>0?'当前票':'对手')+'领先 '+number(Math.abs(d))+' 个百分点。')}catch(e){box.textContent=e.message}}};
+$('#pk').onclick=()=>{if(!active)return;const a=active;showDialog('好友 PK','<p>以'+(mode==='friend'?'好友鉴定票':'当前鉴定票')+'的 <strong>'+score(a.percentile)+'%</strong> 迎战。双方分别按自己的卡池和 UP 数量计算理论百分位。</p><form class="pkform"><label>对手频道<select id="p-pool"><option value="agent">限定代理人</option><option value="engine">限定音擎</option></select></label><label>限定 UP 数量<input required id="p-count" type="number" min="1" max="100000" value="'+a.count+'"></label><label>平均每 UP 抽数<input required id="p-avg" type="number" step="any" min="1" placeholder="输入对手的数据"></label><button>对比欧气</button></form><p class="pkresult" hidden role="status"></p>');$('#p-pool').value=a.pool;const limit=()=>$('#p-avg').max=LuckModel.maxAverage[$('#p-pool').value];limit();$('#p-pool').onchange=limit;
+ let comparison=0;
+ $('.pkform').onsubmit=async e=>{
+   e.preventDefault();
+   const id=++comparison, box=$('.pkresult');
+   box.hidden=false;
+   box.textContent='正在对比欧气…';
+   try{
+     const b=await LuckModel.analyze($('#p-pool').value,$('#p-count').valueAsNumber,$('#p-avg').valueAsNumber);
+     if(id!==comparison)return;
+     const d=+(score(a.percentile)-score(b.percentile)).toFixed(1);
+     box.textContent='当前票 '+score(a.percentile)+'%  /  对手 '+score(b.percentile)+'% · '+(d===0?'按展示精度打成平手。':(d>0?'当前票':'对手')+'领先 '+number(Math.abs(d))+' 个百分点。');
+   }catch(e){if(id===comparison)box.textContent=e.message}
+ };
+};
 function readTicket(hash) {
   const compact = /^#([AE])([0-9A-Z]{1,4})\.([0-9A-Z]{1,5})$/i.exec(hash);
   if (compact) return {

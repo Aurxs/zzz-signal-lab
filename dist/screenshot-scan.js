@@ -1,4 +1,4 @@
-import { readLayout, wordsFrom } from './screenshot-layout.js';
+import { readLayout, wordsFrom } from './screenshot-layout.js?v=2';
 
 function renderRegion(image, box, scale, enhance) {
   const canvas=document.createElement('canvas');
@@ -66,10 +66,9 @@ export async function scanScreenshot(image,worker,stillCurrent,progress,targetPo
   }
   async function read(box,scale,enhance=false,mode='11'){
     if(!stillCurrent())throw Error('cancelled');
-    await worker.setParameters({tessedit_pageseg_mode:mode});
     const canvas=renderRegion(image,box,scale,enhance);
     try {
-      const {data}=await worker.recognize(canvas,{}, {blocks:true,text:false});
+      const {data}=await worker.recognize(canvas,{tessedit_pageseg_mode:mode}, {blocks:true,text:false});
       return wordsFrom(data);
     } finally {canvas.width=canvas.height=1;}
   }
