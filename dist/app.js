@@ -1,6 +1,4 @@
 import { openImport } from './import.js';
-import { getTicket } from './ticket.js';
-import { enableTicketTilt } from './ticket-preview.js';
 
 const $ = s => document.querySelector(s);
 const icons = {
@@ -40,13 +38,6 @@ function ticketScale() {
   const cssWidth = Math.min(850, document.documentElement.clientWidth - 24) - 6
     - 2 * Math.max(8, Math.min(28, window.innerWidth * .025));
   return cssWidth * window.devicePixelRatio > 1160 ? 2 : 1;
-}
-function prepareTicketWhenIdle(result, demo) {
-  if (!window.requestIdleCallback) return;
-  window.requestIdleCallback(() => {
-    if (active !== result || document.hidden) return;
-    getTicket(result, tier(result.percentile), demo, ticketScale(), sharedUrl(result)).preview.catch(() => {});
-  });
 }
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let chartObserver;
@@ -109,7 +100,6 @@ async function calculate(p,c,a,kind='self',jump=false,submitSample=false){
  $('#score').innerHTML=score(r.percentile)+'<small>%</small>';$('#sample-badge').hidden=kind==='demo';$('#sample-badge').textContent=kind==='friend'?'好友鉴定票':kind==='self'?'鉴定完成':'';
  $('#tier').textContent=tier(r.percentile);$('#summary').textContent=pools[r.pool]+' · '+r.count+' 个 UP · 平均 '+number(r.average)+' 抽';chart(r);
  showSampleRank(r,submitSample);
- prepareTicketWhenIdle(r,kind==='demo');
  if(jump&&matchMedia('(max-width:680px)').matches)document.querySelector('.report').scrollIntoView({behavior:reducedMotion.matches?'instant':'smooth',block:'start'})
  }catch(e){if(id!==requestId)return;$('#err').textContent=e.message;$('#err').hidden=false;if(!active)$('#tier').textContent='暂未出具'}finally{if(id===requestId)$('#run').disabled=false}
 }
@@ -205,6 +195,11 @@ $('#share').onclick = async () => {
     }
   };
   try {
+    const [{ getTicket }, { enableTicketTilt }] = await Promise.all([
+      import('./ticket.js'),
+      import('./ticket-preview.js')
+    ]);
+    if (!dialog.open || !surface.isConnected) return;
     const ticket = getTicket(result,tier(result.percentile),demo,ticketScale(),url);
     const picture = await ticket.preview;
     if (!dialog.open || !surface.isConnected) return;
