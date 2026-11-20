@@ -218,8 +218,11 @@ function showSampleSubmission(result,shouldSubmit) {
   }
   submit();
 }
-function rules(){showDialog('概率模型说明','<h3>同样拿到这些 UP，你有多欧？</h3><p>把你和同卡池、同 UP 数量的理论记录比较。用抽更少，欧气百分位更高。若显示 80%，约八成记录花了更多抽，并列记录各计一半。</p><h3>从零垫抽、无大保底开始</h3><p>只统计常规限定频道，截止最后一个限定 UP。每次拿到非当期 S 级后，下一个 S 级必为当期 UP。代理人基础 S 率 0.6%，当期概率 50%，90 抽硬保底。音擎分别为 1%、75% 和 80 抽。</p><h3>软保底采用社区模型</h3><p>代理人从第 74 抽、音擎从第 65 抽起，每抽增加 6 个百分点。软保底曲线是社区估计，具体差异会影响百分位。</p><p>1–100 个 UP 使用预计算概率表，101–100,000 个 UP 在本机按需计算离散卷积。浏览器会缓存近期使用的概率表，同池同 UP 数可直接复用。平均抽数乘以 UP 数后取最近整数还原总抽数，截图均值的舍入可能使结果略有变化。</p><p class="muted"><a href="'+LuckModel.source+'" target="_blank" rel="noopener">查看社区调频模型 ↗</a></p>')}
-$('#footer-rules').onclick=rules;
+$('#footer-rules').onclick = () => {
+  showDialog('概率模型说明', $('#model-guide-template').innerHTML);
+  contents.querySelector('[data-model-source]').href = LuckModel.source;
+  dialog.scrollTop = 0;
+};
 function sharedUrl(result) {
   const url = new URL(location.pathname, location.origin);
   const channel = result.pool === 'agent' ? 'A' : 'E';

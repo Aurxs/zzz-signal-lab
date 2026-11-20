@@ -22,6 +22,53 @@ dialog{padding:0;width:min(520px,calc(100% - 24px));max-height:88dvh;color:var(-
   font-display: swap;
 }
 
+dialog:has(.model-guide) {
+  width: min(680px, calc(100% - 24px));
+  max-width: none;
+  overscroll-behavior: contain;
+}
+dialog:has(.model-guide) .modal-head { position: sticky; top: 0; z-index: 1; }
+.model-guide section + section {
+  border-top: 1px solid #a6a99c;
+  margin-top: 22px;
+  padding-top: 20px;
+}
+#dialog-content .model-guide h3 { font-size: 18px; margin: 0 0 10px; }
+.model-guide a { text-underline-offset: 3px; }
+.model-guide table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.model-guide table:not(:last-child) { margin-bottom: 13px; }
+.model-guide th, .model-guide td {
+  padding: 6px 8px;
+  border: 1px solid #b9bcae;
+  text-align: center;
+}
+.model-guide thead { background: #e3e6d8; }
+.model-guide th:first-child { text-align: left; }
+.model-formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin: 0 0 13px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: #e9ecdf;
+  border-left: 3px solid var(--line);
+  font-size: 18px;
+}
+.model-formula span { font: 600 14px var(--sans); }
+.model-formula math { margin: 0; }
+@media (max-width: 420px) {
+  dialog:has(.model-guide) #dialog-content { padding: 16px 12px; }
+  .model-guide th, .model-guide td { padding: 5px 4px; }
+  .model-formula { font-size: 16px; padding: 10px 8px; }
+}
+
 dialog.ticket-dialog {
   width: min(850px, calc(100vw - 24px));
   max-height: calc(100dvh - 28px);
