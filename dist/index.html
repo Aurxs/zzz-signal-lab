@@ -72,26 +72,37 @@
       </table>
     </section>
     <section>
-      <h3>三、怎样通过离散卷积得到欧非百分位？</h3>
-      <p>每拿到一个 UP，下一段都会回到相同的起点。以两个 UP 为例，记总抽数为 <var>T<sub>2</sub></var>。如果总共用了 <var>t</var> 抽，而第一个用了 <var>j</var> 抽，那么第二个就恰好用了 <var>t − j</var> 抽。两段相互独立，所以各自的概率可以相乘。把所有拆法加起来，就是<strong>离散卷积</strong>。</p>
+      <h3>三、从抽数概率表到理论欧气百分位</h3>
+      <p>比如，你在限定代理人池拿到 5 个 UP，平均每个 75 抽。<strong>「5 个 UP」决定用哪张概率表，「375 抽」决定查表里的哪一格。</strong> 表中每一格的概率都由卡池模型算出。</p>
+      <p><strong>卷积怎样算出「第 5 个 UP 恰好在第 375 抽出现」的概率？</strong> 一种可能是前 4 个 UP 共用 300 抽，第 5 个又用 75 抽。每次抽到 UP 后，垫抽和保底状态都会回到起点，因此这两段独立，这种拆法的概率等于两段各自的概率相乘。前 4 个用 301 抽、最后一个用 74 抽，也是可能的拆法。把每种拆法里两段的概率相乘，再将所有合计为 375 抽的拆法的乘积相加，就得到 375 抽这一格的概率。</p>
+      <p>把恰好用 <var>t</var> 抽拿到 <var>n</var> 个 UP 的概率写成 <var>p<sub>n</sub>(t)</var>，单个 UP 的概率仍记作 <var>f<sub>j</sub></var>。同样的算法可以写成下面的<strong>离散卷积</strong>公式，其中 <var>j</var> 是最后一个 UP 用的抽数。</p>
       <div class="model-formula">
-        <math display="block" aria-label="两个 UP 共用 t 抽的概率，等于对所有 j，将第一个用 j 抽和第二个用 t 减 j 抽的概率相乘再求和">
-          <mi mathvariant="normal">P</mi><mo>(</mo><msub><mi>T</mi><mn>2</mn></msub><mo>=</mo><mi>t</mi><mo>)</mo><mo>=</mo>
-          <munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></munderover>
-          <msub><mi>f</mi><mi>j</mi></msub><msub><mi>f</mi><mrow><mi>t</mi><mo>−</mo><mi>j</mi></mrow></msub>
+        <math display="block" aria-label="拿到 n 个 UP 共用 t 抽的概率，等于把前 n 减 1 个共用 t 减 j 抽的概率与最后一个用 j 抽的概率相乘，再对所有可能的 j 求和">
+          <msub><mi>p</mi><mi>n</mi></msub><mo>(</mo><mi>t</mi><mo>)</mo><mo>=</mo>
+          <munder><mo>∑</mo><mi>j</mi></munder><msub><mi>p</mi><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>(</mo><mi>t</mi><mo>−</mo><mi>j</mi><mo>)</mo>
+          <mo>·</mo><msub><mi>f</mi><mi>j</mi></msub>
         </math>
       </div>
-      <p>拿到两个 UP 的总抽数分布后，再和单个 UP 的概率表卷积一次，就得到三个 UP 的分布。照此推下去，就能得到同池拿到 <var>n</var> 个 UP 的总抽数分布。上一节的期望和方差也能用来核对结果。<var>n</var> 个 UP 的总抽数，期望应为 <var>nμ</var>，方差应为 <var>nσ²</var>。</p>
-      <p>最后才用到玩家的记录。设 <var>T<sub>n</sub></var> 是模型中拿到 <var>n</var> 个 UP 的总抽数，<var>t</var> 是玩家用的总抽数。用抽越少越欧，所以<strong>比你花得更多</strong>的理论结果全部计入，<strong>与你同抽数</strong>的结果按并列计入一半。</p>
+      <p>从单个 UP 的表开始，每多拿一个 UP，就再和单 UP 的表卷积一次。对每个可能的总抽数都按上式计算，便得到固定 UP 数量下的整张表。它的期望应为 <var>nμ</var>，方差应为 <var>nσ²</var>，可以用来核对计算结果。</p>
+      <p><strong>375 抽对应的百分位怎么算？</strong> 把「5 个限定代理人」这张表按总抽数分成三段。越省抽，欧气百分位越高，因此从比 375 抽更费抽的那一侧累加。</p>
+      <table aria-label="375 抽拿到 5 个限定代理人的百分位计算">
+        <thead><tr><th scope="col">拿到第 5 个 UP 时的总抽数</th><th scope="col">模型概率（约）</th><th scope="col">计入百分位的比例</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">374 抽及以下</th><td>17.020%</td><td>0</td></tr>
+          <tr><th scope="row">恰好 375 抽</th><td>0.251%</td><td>一半</td></tr>
+          <tr><th scope="row">376 抽及以上</th><td>82.729%</td><td>全部</td></tr>
+        </tbody>
+      </table>
+      <p>为什么恰好 375 抽的概率只算一半？跳过这一格，得到 82.729%。把这一格全算上，得到 82.980%。我们约定用这个区间的中点代表 375 抽，于是得到 82.729% + 0.251% ÷ 2，四舍五入后是 <strong>82.9%</strong>。这个百分位只取决于所选卡池的理论概率、UP 数量和总抽数。</p>
+      <p>一般地，记模型中拿到 <var>n</var> 个 UP 所用的总抽数为 <var>T<sub>n</sub></var>，你的总抽数为 <var>t</var>，上面的查表规则可以写成</p>
       <div class="model-formula">
         <span>理论欧气百分位 =</span>
-        <math display="block" aria-label="比你花更多抽的概率加上和你同抽数的概率的一半，再乘以百分之百">
+        <math display="block" aria-label="模型总抽数超过实际抽数的概率，加上恰好等于实际抽数的概率的一半，再乘以百分之百">
           <mo>[</mo><mi mathvariant="normal">P</mi><mo>(</mo><msub><mi>T</mi><mi>n</mi></msub><mo>&gt;</mo><mi>t</mi><mo>)</mo>
           <mo>+</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mi mathvariant="normal">P</mi><mo>(</mo><msub><mi>T</mi><mi>n</mi></msub><mo>=</mo><mi>t</mi><mo>)</mo><mo>]</mo>
           <mo>×</mo><mn>100</mn><mo>%</mo>
         </math>
       </div>
-      <p>例如，5 个限定代理人共用 375 抽。按这套模型，约 <strong>82.73%</strong> 的理论记录花得更多，约 <strong>0.25%</strong> 恰好也是 375 抽。把并列部分计入一半，页面最终显示 <strong>82.9%</strong>。</p>
     </section>
   </article>
 </template>
