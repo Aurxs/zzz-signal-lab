@@ -1,42 +1,39 @@
 # 欧非鉴定所 · Signal Lab
 
-《绝区零》玩家调频记录鉴定工具。理论百分位根据同池、同 UP 数量的离散概率分布计算。打开 `dist/` 中的站点即可使用计算器。截图在浏览器内处理。分享车票上的二维码在本机生成，打开对应卡池、UP 数量和总抽数的结果链接。链接使用出票时的域名。
+《绝区零》限定调频记录分析工具。项目根据限定代理人池和限定音擎池各自的保底机制，计算获得指定数量 UP 所需的抽数分布，并以理论百分位衡量一份调频记录在同等条件下的表现。
 
-## 静态托管
+**[在线使用](https://zzz.aurxs.dev/)** · [示例报告](https://zzz.aurxs.dev/#A5.AF) · [部署文档](docs/deployment.md)
 
-`dist/` 已含页面和资源，无需构建。可在本地仓库根目录运行 `python3 -m http.server 8000 --directory dist`，然后访问 `http://localhost:8000`。发布到 GitHub Pages 时，把 `dist/` 里的内容作为 Pages 构件。纯静态托管提供理论鉴定和本地交互。
+## 主要功能
 
-## 启用跨设备样本榜
+- **记录录入**　支持手动填写 UP 数量和平均每 UP 抽数，也支持从米游社调频统计截图中识别并核对这两项数据。
+- **概率分析**　报告展示理论欧气百分位，并在分布图上标出该记录的平均抽数。相同卡池、相同 UP 数量下，总抽数越少，百分位越高。
+- **结果分享与对比**　调频车票附带结果二维码，扫码可查看对应报告。好友对比使用各自卡池与 UP 数量对应的百分位，支持跨池比较。
 
-仓库附带 Cloudflare Pages Functions 入口 `functions/api/sample.js` 和 D1 迁移目录 `db/`（按编号应用 0001、0002）。在仓库根目录完成以下步骤即可发布到自己的 Cloudflare 账户。
+## 概率模型
 
-1. 运行 `npx wrangler login`，然后运行 `npx wrangler d1 create luck-samples`，记下返回的数据库 ID。
-2. 在根目录新建 `wrangler.jsonc`，将下面的示例 ID 换成真实值。将 `name` 改为自己的 Pages 项目名。
+模型从零垫抽、无大保底开始，统计至获得最后一个目标 UP 为止。两种限定池分别使用各自的基础出 S 概率、保底阈值和 UP 命中率，软保底的起点与增幅采用社区估计。
 
-```json
-{
-  "name": "luck-signal",
-  "pages_build_output_dir": "./dist",
-  "compatibility_date": "2025-04-01",
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "luck-samples",
-      "database_id": "<database-id>",
-      "migrations_dir": "db"
-    }
-  ]
-}
+模型先计算首次获得 S 级代理人或音擎所需的抽数。若该次命中当期 UP，抽数统计到此结束。若未命中，则计入获得下一个 S 级结果所需的抽数。按 UP 命中率对两种情况加权，即可得到单个 UP 的抽数分布。每次获得 UP 后，垫抽与保底状态重置，因此可通过离散卷积计算多个 UP 的总抽数分布。
+
+设 $T_n$ 为模型中获得 $n$ 个 UP 所需的总抽数，$t$ 为实际记录的总抽数（UP 数量乘以平均抽数后四舍五入）。理论欧气百分位按下式计算，同抽数的结果计入一半权重。
+
+$$
+\left[P(T_n > t) + \tfrac{1}{2} P(T_n = t)\right] \times 100\%
+$$
+
+例如，限定代理人池中 375 抽获得 5 个 UP，平均每个 UP 75 抽，对应的理论欧气百分位约为 **82.9%**。
+
+## 技术实现
+
+- **分布计算**　Python 和 NumPy 预先生成两种卡池各自 1 至 100 个 UP 的概率表，前端按需读取。超过 100 个 UP 时，浏览器在本机计算并缓存分布，最高支持 100,000 个 UP。[概率表生成脚本](scripts/build_distributions.py) · [前端计算入口](dist/model.js)
+- **截图识别**　浏览器通过 Tesseract.js 提取文字与坐标，按统计卡片的布局匹配卡池、UP 数量和平均抽数。原始图像始终保留在本机。[截图识别](dist/screenshot-scan.js) · [字段匹配](dist/screenshot-layout.js)
+- **匿名样本（可选）**　Cloudflare Pages Functions 与 D1 负责样本存储和分组统计。用户可提交完整识别且未经手动修改的记录，提交内容包括卡池、UP 数量、总抽数和随机设备标识。接口按同卡池、同 UP 数量返回样本百分位，理论百分位独立于样本数据。[样本接口](functions/api/sample.js)
+
+## 本地运行
+
+静态站点位于 `dist/`，无需构建。在仓库根目录执行以下命令后，访问[本地站点](http://localhost:8000)。
+
+```sh
+python3 -m http.server 8000 --directory dist
 ```
-
-3. 本地验证可运行 `npx wrangler d1 migrations apply luck-samples --local` 和 `npx wrangler pages dev dist`。打开本地站点的 `/api/sample`，数据库就绪时返回 `{"available":true}`。
-4. 正式发布前，运行 `npx wrangler d1 migrations apply luck-samples --remote`。首次发布可先运行 `npx wrangler pages project create luck-signal --production-branch main`，将项目名换成配置中的值，再运行 `npx wrangler pages deploy dist --branch main`。Wrangler 会一起部署根目录中的 `functions/`。
-5. 如使用 Git 集成，仓库根目录保留 `functions/`，构建输出目录设为 `dist`。在目标环境绑定同名 D1 数据库并应用迁移。
-
-[Cloudflare Pages Functions 文档](https://developers.cloudflare.com/pages/functions/get-started/) · [D1 绑定](https://developers.cloudflare.com/pages/functions/bindings/) · [D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)
-
-### 样本口径
-
-浏览器完整识别出所选频段、UP 数和平均抽数后，核对界面会显示默认关闭的「匿名提交到样本榜」选项。手动改过数字的记录只用于鉴定，即使改回原值。勾选并确认鉴定后，前端向同源 `POST /api/sample` 发送 `pool`、`count`、`total` 及本机生成的随机 UUID `device`。截图留在本机。后端在数据库中仅存储卡池、UP 数、总抽数及按卡池散列的标识。每个浏览器、每个卡池保留最新一次提交，重复提交会更新原记录。清除浏览器数据或更换设备可产生新的标识。
-
-界面显示本次提交状态。接口返回同组样本数 `size` 和欧气百分位 `percentile`，仅与同卡池、同 UP 数量的记录比较，当前提交计入样本。同抽数的记录平分名次。样本由玩家自愿提供并自行核对，样本百分位仅描述这些提交。服务端无法验证图片来源和内容。
